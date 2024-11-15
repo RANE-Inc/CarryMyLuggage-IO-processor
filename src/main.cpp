@@ -4,6 +4,7 @@
 #include <pb_decode.h>
 
 #include "wheel.h"
+#include "estop.h"
 #include "wheel_commands.pb.h"
 
 
@@ -18,6 +19,7 @@ cobs_decode_result decode_result;
 
 Wheel* wheel_L;
 Wheel* wheel_R;
+EStop* estop;
 
 
 void readCommands() {
@@ -62,11 +64,11 @@ void readCommands() {
 void setup() {
     Serial.begin(115200);
 
-    wheel_L = new Wheel(3, 2, 6);
-    wheel_R = new Wheel(4, 5, 7);
+    estop = new EStop(19);
 
     wheel_L->begin();
     wheel_R->begin();
+    estop->begin();
 }
 
 void loop() {

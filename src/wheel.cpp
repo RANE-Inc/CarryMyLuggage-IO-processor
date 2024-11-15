@@ -1,5 +1,5 @@
 #include "wheel.h"
-Wheel::Wheel(pin_size_t pwm_pin, pin_size_t dir_pin, pin_size_t brake_pin) : 
+#include "estop.h"
     pwm_pin_(pwm_pin),
     dir_pin_(dir_pin),
     brake_pin_(brake_pin),
@@ -24,7 +24,7 @@ bool Wheel::begin() {
 }
 
 void Wheel::update(int32_t command) {
-    if(/* E-Stop triggered */ false) update_unsafe(0);
+    if(EStopHandler::getInstance()->triggered()) update_unsafe(0);
     else {
 
         update_unsafe(current_command_);
