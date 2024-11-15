@@ -3,22 +3,18 @@
 
 class Wheel {
 private:
-uint32_t pwm_pin;
-uint32_t dir_pin;
-uint32_t brake_pin;
-float freq;
-RP2040_PWM* pwmInstance;
+  const pin_size_t pwm_pin_;
+  const pin_size_t dir_pin_;
+  const pin_size_t brake_pin_;
+  const pin_size_t sda_pin_;
+  const pin_size_t scl_pin_;
+  RP2040_PWM* pwm_;
 
-void update_unsafe(uint32_t dutyCycle, bool reverse = false);
+  void update_unsafe(int32_t level);
 
 public:
-Wheel(uint32_t pwm_pin, uint32_t dir_pin, uint32_t brake_pin, float freq = 16000.0f) 
-  : 
-  pwm_pin(pwm_pin),
-  dir_pin(dir_pin),
-  brake_pin(brake_pin),
-  freq(freq) {}
+  Wheel(pin_size_t pwm_pin, pin_size_t dir_pin, pin_size_t brake_pin);
 
 bool begin();
-void update(uint32_t dutyCycle, bool reverse = false);
+  void update(int32_t level);
 };
