@@ -1,8 +1,8 @@
 #include "wheel.h"
 #include "estop.h"
 
-#define ACCELERATION 1000
-#define DECELERATION 2000
+#define ACCELERATION 2078 // counts per s
+#define DECELERATION 16624 // counts per s
 
 constexpr uint32_t sda_valid[2] = { __bitset({0, 4, 8, 12, 16, 20, 24, 28}) /* I2C0 */,
                                 __bitset({2, 6, 10, 14, 18, 22, 26})  /* I2C1 */ };
@@ -17,6 +17,7 @@ Wheel::Wheel(pin_size_t pwm_pin, pin_size_t dir_pin, pin_size_t brake_pin, pin_s
     scl_pin_(scl_pin),
     pwm_(nullptr), 
     encoder_(nullptr),
+    last_motor_update_(0),
     last_command_(0),
     current_command_(0),
     last_read_time_(0),
@@ -55,10 +56,10 @@ bool Wheel::begin() {
     encoder_->begin();
     encoder_->setDirection(AS5600_CLOCK_WISE);  //  default, just be explicit.
     encoder_->resetCumulativePosition(0);
-
-        return true;
-    }
     
+    return true;
+}
+
 void Wheel::update() {
     update(last_command_);
 }
@@ -66,78 +67,81 @@ void Wheel::update() {
 void Wheel::update(int32_t command) {
     if(EStopHandler::getInstance()->triggered()) update_unsafe(0);
     else {
-        if(command == current_command_) return;
-        
-        if(current_command_ > 0) {
-            // Moving forward
-            if(current_command_ < command) {
-                current_command_ += ACCELERATION; // TODO: per unit time
-                
-                if(current_command_ > command) {
-                    // OVERSHOOT
-                    current_command_ = command; 
-                }
-            }
-            else {
-                // command < last_command
-                current_command_ -= DECELERATION; // TODO: per unit time
+        uint32_t now = micros();
 
-                if(current_command_ < command && command >= 0) {
-                    // OVERSHOOT
-                    current_command_ = command;
-                }
-                else if (command < 0 && current_command_ < 0) {
-                    // DIRECTION CHANGE
-                    current_command_ = 0;
-                }
-            }
-        }
-        else if (current_command_ < 0) {
-            // Moving backwards
-            if(current_command_ > command) {
-                current_command_ -= ACCELERATION; // TODO: per unit time
-                
+        if(command != current_command_) {
+            if(current_command_ > 0) {
+                // Moving forward
                 if(current_command_ < command) {
-                    // OVERSHOOT
-                    current_command_ = command; 
+                    current_command_ += ACCELERATION * (now-last_motor_update_) / 1e6;
+                    
+                    if(current_command_ > command) {
+                        // OVERSHOOT
+                        current_command_ = command; 
+                    }
                 }
-            }
-            else {
-                // last_command < command
-                current_command_ += DECELERATION; // TODO: per unit time
+                else {
+                    // command < last_command
+                    current_command_ -= DECELERATION * (now-last_motor_update_) / 1e6;
 
-                if(command < current_command_ && command <= 0) {
-                    // OVERSHOOT
-                    current_command_ = command;
-                }
-                else if (command > 0 && current_command_ > 0) {
-                    // DIRECTION CHANGE
-                    current_command_ = 0;
+                    if(current_command_ < command && command >= 0) {
+                        // OVERSHOOT
+                        current_command_ = command;
+                    }
+                    else if (command < 0 && current_command_ < 0) {
+                        // DIRECTION CHANGE
+                        current_command_ = 0;
+                    }
                 }
             }
-        }
-        else {
-            // current_command_ == 0
-            if(command > 0) {
-                current_command_ += ACCELERATION; // TODO: per unit time
-                
+            else if (current_command_ < 0) {
+                // Moving backwards
                 if(current_command_ > command) {
-                    // OVERSHOOT
-                    current_command_ = command;
+                    current_command_ -= ACCELERATION * (now-last_motor_update_) / 1e6;
+                    
+                    if(current_command_ < command) {
+                        // OVERSHOOT
+                        current_command_ = command; 
+                    }
+                }
+                else {
+                    // last_command < command
+                    current_command_ += DECELERATION * (now-last_motor_update_) / 1e6;
+
+                    if(command < current_command_ && command <= 0) {
+                        // OVERSHOOT
+                        current_command_ = command;
+                    }
+                    else if (command > 0 && current_command_ > 0) {
+                        // DIRECTION CHANGE
+                        current_command_ = 0;
+                    }
                 }
             }
             else {
-                // command < 0
-                current_command_ -= ACCELERATION; // TODO: per unit time
+                // current_command_ == 0
+                if(command > 0) {
+                    current_command_ += ACCELERATION * (now-last_motor_update_) / 1e6;
+                    
+                    if(current_command_ > command) {
+                        // OVERSHOOT
+                        current_command_ = command;
+                    }
+                }
+                else {
+                    // command < 0
+                    current_command_ -= ACCELERATION * (now-last_motor_update_) / 1e6;
 
-                if(current_command_ < command) {
-                    // OVERSHOOT
-                    current_command_ = command;
+                    if(current_command_ < command) {
+                        // OVERSHOOT
+                        current_command_ = command;
+                    }
                 }
             }
         }
 
         update_unsafe(current_command_);
+        last_motor_update_ = now;
         last_command_ = command;
     }
 }
