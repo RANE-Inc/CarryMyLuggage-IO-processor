@@ -33,6 +33,9 @@
  */
 #define COBS_ENCODE_SRC_OFFSET(SRC_LEN)                 (((SRC_LEN) + 253u)/254u)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*****************************************************************************
  * Typedefs
@@ -71,10 +74,6 @@ typedef struct
 /*****************************************************************************
  * Function prototypes
  ****************************************************************************/
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* COBS-encode a string of input bytes.
  *

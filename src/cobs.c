@@ -38,6 +38,11 @@
  *                 operation and the length of the result (that was written to
  *                 dst_buf_ptr)
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 cobs_encode_result cobs_encode(void * dst_buf_ptr, size_t dst_buf_len,
                                const void * src_ptr, size_t src_len)
 {
@@ -220,3 +225,7 @@ cobs_decode_result cobs_decode(void * dst_buf_ptr, size_t dst_buf_len,
 
     return result;
 }
+
+#ifdef __cplusplus
+}
+#endif
