@@ -9,26 +9,25 @@
 #include "wheel_commands.pb.h"
 #include "wheel_states.pb.h"
 
+#define COM_SERIAL Serial1
+#define DEBUG_SERIAL Serial
 
 uint8_t incoming_byte;
-uint8_t incoming_buffer[256];
+uint8_t incoming_buffer[256], outgoing_buffer[256]/*, msg_buffer[256]*/;
+uint8_t msg_commands_buffer[256], msg_states_buffer[256];
 uint16_t incoming_buffer_len;
 
 carry_my_luggage_WheelCommands msg_commands;
-uint8_t msg_commands_buffer[256];
 pb_istream_t istream;
 cobs_decode_result decode_result;
 
 carry_my_luggage_WheelStates msg_states;
-uint8_t msg_states_buffer[256];
 pb_ostream_t ostream;
 cobs_encode_result encode_result;
 
-uint8_t outgoing_buffer[256];
-
 bool initComplete;
 
-// mutex_t encoder_mutex = {0}; 
+mutex_t encoder_mutex{0}; 
 
 Wheel wheel_L(17, 16, 18, 10, 11);
 Wheel wheel_R(14, 15, 13, 20, 21);
@@ -36,67 +35,78 @@ EStop estop(19);
 
 
 void printWheelCommands() {
-    Serial.println();
-    Serial.print("Wheel commands: ");
-    Serial.print(msg_commands.velocity_left);
-    Serial.print(" ");
-    Serial.println(msg_commands.velocity_right);
+    DEBUG_SERIAL.println();
+    DEBUG_SERIAL.print("Wheel commands: ");
+    DEBUG_SERIAL.print(msg_commands.velocity_left);
+    DEBUG_SERIAL.print(" ");
+    DEBUG_SERIAL.println(msg_commands.velocity_right);
 }
 
 void printWheelStates() {
-    Serial.println();
-    Serial.print("Wheel positions: ");
-    Serial.print(msg_states.position_left);
-    Serial.print(" ");
-    Serial.println(msg_states.position_right);
-    Serial.print("Wheel velocities: ");
-    Serial.print(msg_states.velocity_left);
-    Serial.print(" ");
-    Serial.println(msg_states.velocity_right);
+    DEBUG_SERIAL.println();
+    DEBUG_SERIAL.print("Wheel positions: ");
+    DEBUG_SERIAL.print(msg_states.position_left);
+    DEBUG_SERIAL.print(" ");
+    DEBUG_SERIAL.println(msg_states.position_right);
+    DEBUG_SERIAL.print("Wheel velocities: ");
+    DEBUG_SERIAL.print(msg_states.velocity_left);
+    DEBUG_SERIAL.print(" ");
+    DEBUG_SERIAL.println(msg_states.velocity_right);
 }
 
 void printBufferDec(uint8_t* buf, size_t len) {
     for(size_t i = 0; i < len-1; i++) {
-        Serial.print(buf[i], DEC);
-        Serial.print(", ");
+        DEBUG_SERIAL.print(buf[i], DEC);
+        DEBUG_SERIAL.print(", ");
     }
-    if(len >= 1) Serial.println(buf[len-1], DEC);
+    if(len >= 1) DEBUG_SERIAL.println(buf[len-1], DEC);
 
-    Serial.println();
+    DEBUG_SERIAL.println();
 }
 
 void printBufferHex(uint8_t* buf, size_t len) {
-    for(size_t i = 0; i < len; i++) {
-        Serial.print(buf[i], HEX);
-        Serial.print(" ");
+    for(size_t i = 0; i < len-1; i++) {
+        if(buf[i] < 16) DEBUG_SERIAL.print("0");
+        DEBUG_SERIAL.print(buf[i], HEX);
+        DEBUG_SERIAL.print(" ");
     }
-    if(len >= 1) Serial.println(buf[len-1], HEX);
+    if(len >= 1) {
+        if(buf[len-1] < 16) DEBUG_SERIAL.print("0");
+        DEBUG_SERIAL.println(buf[len-1], HEX);
+    }
 
-    Serial.println();
+    DEBUG_SERIAL.println();
 }
 
 void readCommands() {
-    while(Serial.available()){
-        incoming_byte = Serial.read();
+    while(COM_SERIAL.available()){
+        incoming_byte = COM_SERIAL.read();
 
         if(incoming_byte == '\0') {
-            if(incoming_buffer_len == 0) return;
+            if(incoming_buffer_len == 0) break;
 
+            // printBufferHex(incoming_buffer, incoming_buffer_len);
+
+            // decode_result = cobs_decode(msg_buffer, 256, incoming_buffer, incoming_buffer_len & 0x00FF);
             decode_result = cobs_decode(msg_commands_buffer, 256, incoming_buffer, incoming_buffer_len & 0x00FF);
                 
-            if(decode_result.status != cobs_decode_status::COBS_DECODE_OK) {
-                // TODO: Logging
+            if(decode_result.status == cobs_decode_status::COBS_DECODE_OK) {
+                // istream = pb_istream_from_buffer(msg_buffer, decode_result.out_len);
+                istream = pb_istream_from_buffer(msg_commands_buffer, decode_result.out_len);
 
-                return;
+                if(pb_decode(&istream, carry_my_luggage_WheelCommands_fields, &msg_commands)) {
+                    wheel_L.update(msg_commands.velocity_left);
+                    wheel_R.update(msg_commands.velocity_right);
+
+                    printWheelCommands();                
+                }
+                else {
+                    // TODO: Logging
+                }
+
             }
-            
-            istream = pb_istream_from_buffer(msg_commands_buffer, decode_result.out_len);
-
-            if(pb_decode(&istream, carry_my_luggage_WheelCommands_fields, &msg_commands)) {
-                wheel_L.update(msg_commands.velocity_left);
-                wheel_R.update(msg_commands.velocity_right);
-
-                // printWheelCommands();                
+            else {
+                // TODO: Logging
             }
 
             incoming_buffer_len = 0;
@@ -110,28 +120,32 @@ void readCommands() {
             incoming_buffer_len++;
         }
     }
+
+    // Run update in case of E-Stop trigger or parse incomplete
+    wheel_L.update();
+    wheel_R.update();
 }
 
-void writePositions() {
+void writeStates() {
     {
-        // CoreMutex mutex(&encoder_mutex); // FIXME: Idk why this doesn't work
-        // wheel_L.read_encoder();
-        // wheel_R.read_encoder();
+        CoreMutex mutex(&encoder_mutex);
         msg_states.position_left = wheel_L.get_position();
         msg_states.velocity_left = wheel_L.get_velocity();
         msg_states.position_right = wheel_R.get_position();
         msg_states.velocity_right = wheel_R.get_velocity();
     }
 
+    // ostream = pb_ostream_from_buffer(msg_buffer, 256);
     ostream = pb_ostream_from_buffer(msg_states_buffer, 256);
 
     pb_encode(&ostream, carry_my_luggage_WheelStates_fields, &msg_states);
 
+    // encode_result = cobs_encode(outgoing_buffer, 256, msg_buffer, ostream.bytes_written);
     encode_result = cobs_encode(outgoing_buffer, 256, msg_states_buffer, ostream.bytes_written);
 
     if(encode_result.status == cobs_encode_status::COBS_ENCODE_OK) {
-        Serial.write(outgoing_buffer, encode_result.out_len);
-        Serial.write((uint8_t)0);
+        COM_SERIAL.write(outgoing_buffer, encode_result.out_len);
+        COM_SERIAL.write((uint8_t)0);
         
         // printBufferHex(outgoing_buffer, encode_result.out_len);
     }
@@ -145,6 +159,7 @@ void writePositions() {
                 break;
             default:
                 // TODO: Logging
+                break;
         }
     }
 
@@ -153,7 +168,10 @@ void writePositions() {
 
 
 void setup() {
-    Serial.begin(115200);
+    mutex_init(&encoder_mutex);
+
+    COM_SERIAL.begin(115200);
+    DEBUG_SERIAL.begin(115200);
 
     wheel_L.begin();
     wheel_R.begin();
@@ -164,7 +182,7 @@ void setup() {
 
 void loop() {
     readCommands();
-    writePositions();
+    writeStates();
     // delayMicroseconds(1000);
 }
 
@@ -174,7 +192,7 @@ void setup1() {
 
 void loop1() {
     // Read encoders as quickly as possible to make sure getCumulativePosition and getAngularSpeed don't skip counts at high RPM
-    // CoreMutex mutex(&encoder_mutex); // Screw it, memory access is atomic either way
+    CoreMutex mutex(&encoder_mutex);
     wheel_L.read_encoder();
     wheel_R.read_encoder();
 }

@@ -2,7 +2,7 @@
 #include "estop.h"
 
 #define ACCELERATION 2078 // counts per s
-#define DECELERATION 16624 // counts per s
+#define DECELERATION 6000 // counts per s
 
 constexpr uint32_t sda_valid[2] = { __bitset({0, 4, 8, 12, 16, 20, 24, 28}) /* I2C0 */,
                                 __bitset({2, 6, 10, 14, 18, 22, 26})  /* I2C1 */ };
@@ -168,7 +168,7 @@ void Wheel::read_encoder() {
     uint32_t now  = micros();
     int32_t current_position = encoder_->getCumulativePosition(true);
     
-    last_velocity_ = (current_position-last_position_) / (now - last_read_time_) * 1e6;
+    last_velocity_ = (current_position-last_position_)  * 1e6 / (now - last_read_time_);
     last_position_ = current_position;
     last_read_time_ = now;
 }
