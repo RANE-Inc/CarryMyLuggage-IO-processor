@@ -29,8 +29,8 @@ bool initComplete;
 
 mutex_t encoder_mutex{0}; 
 
-Wheel wheel_L(17, 16, 18, 10, 11);
-Wheel wheel_R(14, 15, 13, 20, 21);
+Wheel wheel_L(14, 15, 13, 10, 11);
+Wheel wheel_R(17, 16, 18, 20, 21);
 EStop estop(19);
 
 
