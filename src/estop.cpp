@@ -28,6 +28,7 @@ EStop::EStop(pin_size_t pin) : pin_(pin) {}
 bool EStop::begin() {
     pinMode(pin_, INPUT_PULLDOWN);
 
+    // TODO: debounce
     attachInterrupt(pin_, EStop::interruptRoutine, FALLING);
 
     return true;

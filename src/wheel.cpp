@@ -65,7 +65,7 @@ void Wheel::update() {
 }
 
 void Wheel::update(int32_t command) {
-    if(EStopHandler::getInstance()->triggered()) update_unsafe(0);
+    if(/*EStopHandler::getInstance()->triggered()*/!digitalRead(19)) update_unsafe(0); // FIXME: EStop debouncing and noise reduction
     else {
         uint32_t now = micros();
 
