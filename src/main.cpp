@@ -12,6 +12,8 @@
 #define COM_SERIAL Serial1
 #define DEBUG_SERIAL Serial
 
+#define CONTROLLER_TIMEOUT 2000000 // in us
+
 uint8_t incoming_byte;
 uint8_t incoming_buffer[256], outgoing_buffer[256]/*, msg_buffer[256]*/;
 uint8_t msg_commands_buffer[256], msg_states_buffer[256];
@@ -32,6 +34,8 @@ mutex_t encoder_mutex{0};
 Wheel wheel_L(14, 15, 13, 10, 11);
 Wheel wheel_R(17, 16, 18, 20, 21);
 EStop estop(19);
+
+uint32_t last_successful_commands_read;
 
 
 void printWheelCommands() {
@@ -79,6 +83,8 @@ void printBufferHex(uint8_t* buf, size_t len) {
 }
 
 void readCommands() {
+    uint32_t now = micros();
+
     while(COM_SERIAL.available()){
         incoming_byte = COM_SERIAL.read();
 
@@ -98,7 +104,9 @@ void readCommands() {
                     wheel_L.update(msg_commands.velocity_left);
                     wheel_R.update(msg_commands.velocity_right);
 
-                    printWheelCommands();                
+                    last_successful_commands_read = now = micros(); // Update now again as read cycle might take some time
+
+                    // printWheelCommands();                
                 }
                 else {
                     // TODO: Logging
@@ -121,9 +129,16 @@ void readCommands() {
         }
     }
 
-    // Run update in case of E-Stop trigger or parse incomplete
-    wheel_L.update();
-    wheel_R.update();
+    if(now-last_successful_commands_read > CONTROLLER_TIMEOUT) {
+        // TIMEOUT
+        wheel_L.update(0);
+        wheel_R.update(0);
+    }
+    else {
+        // Run update to check for E-Stop trigger or when parse incomplete
+        wheel_L.update();
+        wheel_R.update();
+    }
 }
 
 void writeStates() {
